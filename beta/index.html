@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow, noarchive">
+<title>私人遊戲</title>
+<style>
+/* 密碼頁：遊戲本體加密在 game.bin，輸入正確密碼才在瀏覽器裡解開 */
+:root { color-scheme: dark; }
+html, body { height: 100%; margin: 0; }
+body { background: #0a0c12; color: #e8ecf4; font-family: "Microsoft JhengHei", "PingFang TC", "Noto Sans TC", sans-serif; display: grid; place-items: center; padding: 16px; box-sizing: border-box; }
+[hidden] { display: none !important; }
+form { width: min(360px, 100%); display: flex; flex-direction: column; gap: 12px; }
+h1 { margin: 0 0 4px; font-size: 22px; }
+p { margin: 0; color: #8a93ab; font-size: 14px; line-height: 1.6; }
+#pw { font-size: 18px; font-family: inherit; padding: 12px; background: #11151f; color: inherit; border: 1px solid #283049; border-radius: 8px; outline: none; }
+#pw:focus { border-color: #e6c15a; }
+label { display: flex; gap: 8px; align-items: center; font-size: 14px; color: #c8cdd6; }
+#go { font-size: 17px; font-weight: 700; font-family: inherit; padding: 12px; border: 0; border-radius: 8px; background: linear-gradient(180deg, #f3d27a, #c99a35); color: #1a1205; cursor: pointer; }
+#go:disabled { opacity: .5; }
+#msg { min-height: 20px; color: #ff5f56; font-size: 14px; }
+</style>
+</head>
+<body>
+<form id="f" hidden>
+  <h1>私人遊戲</h1>
+  <p>請輸入朋友給你的密碼。</p>
+  <input id="pw" type="password" autocomplete="current-password" autocapitalize="off" spellcheck="false" required>
+  <label><input id="rem" type="checkbox" checked>在這台裝置記住密碼</label>
+  <button id="go">進入</button>
+  <div id="msg" role="alert"></div>
+</form>
+<p id="load">載入中…</p>
+<script>
+(() => {
+  // game.bin = IV(16) + HMAC-SHA256(IV+密文)(32) + AES-256-CBC(gzip(遊戲 HTML))；金鑰由 PBKDF2-SHA256 從密碼導出 64 bytes（前 32 加密、後 32 驗證）
+  const SALT = '8g+2zYdeqKYLCmxmK59MZA==', ITER = 250000, VER = '9a98400d8aaa', KEY = 'gate.key';
+  const $ = id => document.getElementById(id);
+  const b64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+  const store = {
+    get() { try { return localStorage.getItem(KEY); } catch (e) { return null; } },
+    set(v) { try { localStorage.setItem(KEY, v); } catch (e) {} },
+    del() { try { localStorage.removeItem(KEY); } catch (e) {} },
+  };
+  let bin = null;
+  async function data() {
+    if (bin) return bin;
+    let r; try { r = await fetch('game.bin?v=' + VER); } catch (e) { throw new Error('net'); }
+    if (!r.ok) throw new Error('net');
+    return (bin = new Uint8Array(await r.arrayBuffer()));
+  }
+  async function derive(pw) {
+    const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(pw), 'PBKDF2', false, ['deriveBits']);
+    return new Uint8Array(await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: b64(SALT), iterations: ITER }, base, 512));
+  }
+  // 金鑰對：回傳遊戲 HTML；不對：回傳 null
+  async function unlock(km) {
+    const d = await data(), iv = d.slice(0, 16), mac = d.slice(16, 48), ct = d.slice(48);
+    const mk = await crypto.subtle.importKey('raw', km.slice(32), { name: 'HMAC', hash: 'SHA-256' }, false, ['verify']);
+    const signed = new Uint8Array(16 + ct.length); signed.set(iv); signed.set(ct, 16);
+    if (!(await crypto.subtle.verify('HMAC', mk, mac, signed))) return null;
+    const ek = await crypto.subtle.importKey('raw', km.slice(0, 32), 'AES-CBC', false, ['decrypt']);
+    const zipped = await crypto.subtle.decrypt({ name: 'AES-CBC', iv }, ek, ct);
+    return new Response(new Blob([zipped]).stream().pipeThrough(new DecompressionStream('gzip'))).text();
+  }
+  function show(html) { document.open(); document.write(html); document.close(); }
+  function ask(msg) { $('load').hidden = true; $('f').hidden = false; $('msg').textContent = msg || ''; $('pw').focus(); }
+  function fail(e) { return e && e.message === 'net' ? '下載失敗，請檢查網路後重新整理。' : '解鎖失敗，請重新整理後再試。'; }
+
+  $('f').addEventListener('submit', async ev => {
+    ev.preventDefault();
+    const pw = $('pw').value; if (!pw) return;
+    $('go').disabled = true; $('go').textContent = '解鎖中…'; $('msg').textContent = '';
+    try {
+      const km = await derive(pw), html = await unlock(km);
+      if (html) { if ($('rem').checked) store.set(btoa(String.fromCharCode(...km))); return show(html); }
+      $('msg').textContent = '密碼不對，再試一次。';
+    } catch (e) { $('msg').textContent = fail(e); }
+    $('go').disabled = false; $('go').textContent = '進入';
+  });
+
+  (async () => {
+    if (!window.crypto || !crypto.subtle || typeof DecompressionStream !== 'function') { $('load').textContent = '這個瀏覽器版本太舊，請更新後再開啟。'; return; }
+    const saved = store.get();
+    if (saved) {
+      try { const html = await unlock(b64(saved)); if (html) return show(html); store.del(); }
+      catch (e) { if (e && e.message === 'net') { $('load').textContent = fail(e); return; } store.del(); }
+    }
+    ask(saved ? '密碼已經更換，請輸入新密碼。' : '');
+  })();
+})();
+</script>
+</body>
+</html>
