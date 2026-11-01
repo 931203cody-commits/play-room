@@ -35,7 +35,7 @@ label { display: flex; gap: 8px; align-items: center; font-size: 14px; color: #c
 <script>
 (() => {
   // game.bin = IV(16) + HMAC-SHA256(IV+密文)(32) + AES-256-CBC(gzip(遊戲 HTML))；金鑰由 PBKDF2-SHA256 從密碼導出 64 bytes（前 32 加密、後 32 驗證）
-  const SALT = '8g+2zYdeqKYLCmxmK59MZA==', ITER = 250000, VER = 'c7192c950e44', KEY = 'gate.key';
+  const SALT = '8g+2zYdeqKYLCmxmK59MZA==', ITER = 250000, VER = '6cc8555c40cd', KEY = 'gate.key';
   const $ = id => document.getElementById(id);
   const b64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
   const store = {
