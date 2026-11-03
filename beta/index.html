@@ -35,7 +35,7 @@ label { display: flex; gap: 8px; align-items: center; font-size: 14px; color: #c
 <script>
 (() => {
   // game.bin = IV(16) + HMAC-SHA256(IV+密文)(32) + AES-256-CBC(gzip(遊戲 HTML))；金鑰由 PBKDF2-SHA256 從密碼導出 64 bytes（前 32 加密、後 32 驗證）
-  const SALT = '8g+2zYdeqKYLCmxmK59MZA==', ITER = 250000, VER = '4741f78a1462', KEY = 'gate.key';
+  const SALT = '8g+2zYdeqKYLCmxmK59MZA==', ITER = 250000, VER = '5180053d87c0', KEY = 'gate.key';
   const $ = id => document.getElementById(id);
   const b64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
   const store = {
@@ -64,7 +64,8 @@ label { display: flex; gap: 8px; align-items: center; font-size: 14px; color: #c
     const zipped = await crypto.subtle.decrypt({ name: 'AES-CBC', iv }, ek, ct);
     return new Response(new Blob([zipped]).stream().pipeThrough(new DecompressionStream('gzip'))).text();
   }
-  function show(html) { document.open(); document.write(html); document.close(); }
+  // 解開之後把金鑰留在這個分頁（sessionStorage）：遊戲裡加密的背景音樂（music\*.bin）用同一把金鑰解開
+  function show(html, km) { try { if (km) sessionStorage.setItem('gate.km', btoa(String.fromCharCode(...km))); } catch (e) {} document.open(); document.write(html); document.close(); }
   function ask(msg) { $('load').hidden = true; $('f').hidden = false; $('msg').textContent = msg || ''; $('pw').focus(); }
   function fail(e) { return e && e.message === 'net' ? '下載失敗，請檢查網路後重新整理。' : '解鎖失敗，請重新整理後再試。'; }
 
@@ -74,7 +75,7 @@ label { display: flex; gap: 8px; align-items: center; font-size: 14px; color: #c
     $('go').disabled = true; $('go').textContent = '解鎖中…'; $('msg').textContent = '';
     try {
       const km = await derive(pw), html = await unlock(km);
-      if (html) { if ($('rem').checked) store.set(btoa(String.fromCharCode(...km))); return show(html); }
+      if (html) { if ($('rem').checked) store.set(btoa(String.fromCharCode(...km))); return show(html, km); }
       $('msg').textContent = '密碼不對，再試一次。';
     } catch (e) { $('msg').textContent = fail(e); }
     $('go').disabled = false; $('go').textContent = '進入';
@@ -84,7 +85,7 @@ label { display: flex; gap: 8px; align-items: center; font-size: 14px; color: #c
     if (!window.crypto || !crypto.subtle || typeof DecompressionStream !== 'function') { $('load').textContent = '這個瀏覽器版本太舊，請更新後再開啟。'; return; }
     const saved = store.get();
     if (saved) {
-      try { const html = await unlock(b64(saved)); if (html) return show(html); store.del(); }
+      try { const km = b64(saved), html = await unlock(km); if (html) return show(html, km); store.del(); }
       catch (e) { if (e && e.message === 'net') { $('load').textContent = fail(e); return; } store.del(); }
     }
     ask(saved ? '密碼已經更換，請輸入新密碼。' : '');
