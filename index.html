@@ -44,7 +44,7 @@ label { display: flex; gap: 8px; align-items: center; font-size: 14px; color: #c
 <script>
 (() => {
   // game.bin = IV(16) + HMAC-SHA256(IV+密文)(32) + AES-256-CBC(gzip(遊戲 HTML))；金鑰由 PBKDF2-SHA256 從密碼導出 64 bytes（前 32 加密、後 32 驗證）
-  const SALT = '8g+2zYdeqKYLCmxmK59MZA==', ITER = 250000, VER = 'ae1f8810f7ba', KEY = 'gate.key';
+  const SALT = '8g+2zYdeqKYLCmxmK59MZA==', ITER = 250000, VER = 'af8cc712bb3d', KEY = 'gate.key';
   const $ = id => document.getElementById(id);
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {}); // 主畫面 App 的離線快取
   // 解開後整頁換成遊戲，head 裡的 App 設定會不見：再補回去，遊戲畫面裡也能「加到主畫面」

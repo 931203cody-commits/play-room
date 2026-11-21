@@ -23,7 +23,8 @@ self.addEventListener('fetch', e => {
     e.respondWith((async () => {
       const c = await caches.open(CACHE);
       try {
-        const r = await fetch(req);
+        // 入口頁不用瀏覽器的 HTTP 快取（GitHub Pages 會讓舊頁面留 10 分鐘）：每次都問伺服器有沒有新版（沒變只回 304，很省流量）
+        const r = isGame(u) ? await fetch(req) : await fetch(req.url, { cache: 'no-cache', credentials: 'same-origin' });
         if (r.ok) {
           if (isGame(u)) { // 新版的 game.bin 存起來，舊版的刪掉（每一版的網址帶 ?v=版本號）
             for (const k of await c.keys()) if (isGame(new URL(k.url)) && k.url !== req.url) await c.delete(k);
