@@ -44,11 +44,54 @@ label { display: flex; gap: 8px; align-items: center; font-size: 14px; color: #c
 <script>
 (() => {
   // game.bin = IV(16) + HMAC-SHA256(IV+密文)(32) + AES-256-CBC(gzip(遊戲 HTML))；金鑰由 PBKDF2-SHA256 從密碼導出 64 bytes（前 32 加密、後 32 驗證）
-  const SALT = '8g+2zYdeqKYLCmxmK59MZA==', ITER = 250000, VER = 'af8cc712bb3d', KEY = 'gate.key';
+  const SALT = '8g+2zYdeqKYLCmxmK59MZA==', ITER = 250000, VER = '4e505e23134b', KEY = 'gate.key';
   const $ = id => document.getElementById(id);
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {}); // 主畫面 App 的離線快取
   // 解開後整頁換成遊戲，head 裡的 App 設定會不見：再補回去，遊戲畫面裡也能「加到主畫面」
   function pwaTags() { try { const h = document.head || document.documentElement; for (const [tag, a] of [['link', { rel: 'manifest', href: 'manifest.webmanifest' }], ['link', { rel: 'apple-touch-icon', href: 'icon-180.png' }], ['link', { rel: 'icon', href: 'icon-192.png' }], ['meta', { name: 'theme-color', content: '#0a0c12' }], ['meta', { name: 'mobile-web-app-capable', content: 'yes' }], ['meta', { name: 'apple-mobile-web-app-capable', content: 'yes' }], ['meta', { name: 'apple-mobile-web-app-status-bar-style', content: 'black' }], ['meta', { name: 'apple-mobile-web-app-title', content: '晶幣英雄傳' }]]) { const e = document.createElement(tag); for (const k in a) e.setAttribute(k, a[k]); h.appendChild(e); } } catch (e) {} }
+  // 自動提示「安裝到主畫面」（使用者 11/21）：網頁不能自己安裝，只能跳出提示讓玩家點一下
+  //  ・Android Chrome／三星瀏覽器：等瀏覽器發出 beforeinstallprompt（網站可以安裝、玩家用了一陣子之後），跳出「安裝」按鈕，點了才叫出系統的安裝視窗
+  //  ・iPhone／iPad：沒有安裝視窗，改成教學「點分享按鈕 → 加入主畫面」
+  //  ・LINE、Facebook 等 App 裡面的瀏覽器不能安裝：提示改用 Chrome／Safari 開啟
+  //  ・已經是從主畫面打開的就不提示；按「以後再說」7 天內不再出現
+  let bip = null, pwaReady = false, pwaShown = false;
+  const PWA_NO = 'gate.pwaNo', ua = navigator.userAgent;
+  const pwaIsApp = () => { try { return matchMedia('(display-mode: fullscreen)').matches || matchMedia('(display-mode: standalone)').matches || navigator.standalone === true; } catch (e) { return false; } };
+  const pwaLater = () => { try { return Date.now() - (+localStorage.getItem(PWA_NO) || 0) < 7 * 864e5; } catch (e) { return false; } };
+  const pwaNo = () => { try { localStorage.setItem(PWA_NO, String(Date.now())); } catch (e) {} };
+  const iOS = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const inApp = /\bLine\/|FBAN|FBAV|Instagram|MicroMessenger/i.test(ua);
+  function pwaBar() {
+    if (pwaShown || !pwaReady || pwaIsApp() || pwaLater()) return;
+    let msg, btn = '';
+    if (inApp) msg = '想加到主畫面，請點右上角選單，選「用預設瀏覽器開啟」（Chrome 或 Safari）';
+    else if (bip) { msg = '把「晶幣英雄傳」安裝到主畫面：有自己的圖示，打開就是全螢幕'; btn = '安裝'; }
+    else if (iOS) msg = '加到主畫面：點瀏覽器的「分享」按鈕（方框上有向上箭頭），往下找「加入主畫面」';
+    else return;
+    pwaShown = true;
+    const d = document.createElement('div'); d.id = 'pwaBar';
+    d.setAttribute('style', 'position:fixed;left:50%;bottom:max(12px,env(safe-area-inset-bottom));transform:translateX(-50%);z-index:2147483647;width:max-content;max-width:calc(100vw - 24px);box-sizing:border-box;display:flex;align-items:center;gap:10px;padding:8px 10px;background:rgba(14,18,30,.97);color:#e8ecf4;border:1px solid #e6c15a;border-radius:12px;box-shadow:0 6px 24px rgba(0,0,0,.6);font:14px/1.45 "Microsoft JhengHei","PingFang TC","Noto Sans TC",sans-serif;');
+    const bs = 'flex:none;font-weight:700;font-size:14px;font-family:inherit;padding:7px 12px;border-radius:8px;cursor:pointer;';
+    d.innerHTML = '<img src="icon-192.png" alt="" style="width:36px;height:36px;border-radius:8px;flex:none">' +
+      '<span style="min-width:0">' + msg + '</span>' +
+      (btn ? '<button data-a="go" style="' + bs + 'border:0;background:linear-gradient(180deg,#f3d27a,#c99a35);color:#1a1205">' + btn + '</button>' : '') +
+      '<button data-a="no" style="' + bs + 'border:1px solid #3a4360;background:transparent;color:#c8cdd6">' + (btn ? '以後再說' : '知道了') + '</button>';
+    d.addEventListener('click', async ev => {
+      ev.stopPropagation(); ev.preventDefault();
+      const a = ev.target && ev.target.closest && ev.target.closest('[data-a]'); if (!a) return;
+      if (a.dataset.a === 'go' && bip) { const p = bip; bip = null; try { p.prompt(); const r = await p.userChoice; if (!r || r.outcome !== 'accepted') pwaNo(); } catch (e) {} }
+      else pwaNo();
+      d.remove();
+    });
+    (document.body || document.documentElement).appendChild(d);
+  }
+  const onBip = e => { e.preventDefault(); bip = e; pwaBar(); };
+  const onInstalled = () => { bip = null; const d = document.getElementById('pwaBar'); if (d) d.remove(); };
+  function pwaListen() { window.addEventListener('beforeinstallprompt', onBip); window.addEventListener('appinstalled', onInstalled); }
+  pwaListen();
+  // 換成遊戲畫面之後（document.open 會清掉 window 上的事件）：重新監聽，遊戲開了幾秒再提示，不擋住標題畫面的動畫
+  function pwaAfterShow() { pwaListen(); setTimeout(() => { pwaReady = true; pwaBar(); }, 6000); }
+  window.__pwaTest = () => { pwaReady = true; pwaShown = false; pwaBar(); return !!document.getElementById('pwaBar'); }; // 測試用：馬上顯示提示
   const b64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
   const store = {
     get() { try { return localStorage.getItem(KEY); } catch (e) { return null; } },
@@ -78,7 +121,7 @@ label { display: flex; gap: 8px; align-items: center; font-size: 14px; color: #c
   }
   // 解開之後把金鑰留在這個分頁（sessionStorage）：遊戲裡加密的背景音樂（music\*.bin）用同一把金鑰解開
   // gate.ver：這次載入的版本，遊戲開著時用來比對網站有沒有更新（game.js 的 siteUpdCheck）
-  function show(html, km) { try { if (km) sessionStorage.setItem('gate.km', btoa(String.fromCharCode(...km))); sessionStorage.setItem('gate.ver', VER); } catch (e) {} document.open(); document.write(html); document.close(); pwaTags(); }
+  function show(html, km) { try { if (km) sessionStorage.setItem('gate.km', btoa(String.fromCharCode(...km))); sessionStorage.setItem('gate.ver', VER); } catch (e) {} document.open(); document.write(html); document.close(); pwaTags(); pwaAfterShow(); }
   function ask(msg) { $('load').hidden = true; $('f').hidden = false; $('msg').textContent = msg || ''; $('pw').focus(); }
   function fail(e) { return e && e.message === 'net' ? '下載失敗，請檢查網路後重新整理。' : '解鎖失敗，請重新整理後再試。'; }
 
