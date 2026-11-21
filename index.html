@@ -5,6 +5,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow, noarchive">
 <title>私人遊戲</title>
+<!-- 主畫面 App（PWA，使用者 11/21）：圖示、全螢幕橫向、離線快取（sw.js）；檔案在 krcw-deploy\pwa，build.ps1 會複製進 site -->
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-180.png">
+<meta name="theme-color" content="#0a0c12">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="晶幣英雄傳">
 <style>
 /* 密碼頁：遊戲本體加密在 game.bin，輸入正確密碼才在瀏覽器裡解開 */
 :root { color-scheme: dark; }
@@ -35,8 +44,11 @@ label { display: flex; gap: 8px; align-items: center; font-size: 14px; color: #c
 <script>
 (() => {
   // game.bin = IV(16) + HMAC-SHA256(IV+密文)(32) + AES-256-CBC(gzip(遊戲 HTML))；金鑰由 PBKDF2-SHA256 從密碼導出 64 bytes（前 32 加密、後 32 驗證）
-  const SALT = '8g+2zYdeqKYLCmxmK59MZA==', ITER = 250000, VER = '455c3ff6f194', KEY = 'gate.key';
+  const SALT = '8g+2zYdeqKYLCmxmK59MZA==', ITER = 250000, VER = 'ae1f8810f7ba', KEY = 'gate.key';
   const $ = id => document.getElementById(id);
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {}); // 主畫面 App 的離線快取
+  // 解開後整頁換成遊戲，head 裡的 App 設定會不見：再補回去，遊戲畫面裡也能「加到主畫面」
+  function pwaTags() { try { const h = document.head || document.documentElement; for (const [tag, a] of [['link', { rel: 'manifest', href: 'manifest.webmanifest' }], ['link', { rel: 'apple-touch-icon', href: 'icon-180.png' }], ['link', { rel: 'icon', href: 'icon-192.png' }], ['meta', { name: 'theme-color', content: '#0a0c12' }], ['meta', { name: 'mobile-web-app-capable', content: 'yes' }], ['meta', { name: 'apple-mobile-web-app-capable', content: 'yes' }], ['meta', { name: 'apple-mobile-web-app-status-bar-style', content: 'black' }], ['meta', { name: 'apple-mobile-web-app-title', content: '晶幣英雄傳' }]]) { const e = document.createElement(tag); for (const k in a) e.setAttribute(k, a[k]); h.appendChild(e); } } catch (e) {} }
   const b64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
   const store = {
     get() { try { return localStorage.getItem(KEY); } catch (e) { return null; } },
@@ -66,7 +78,7 @@ label { display: flex; gap: 8px; align-items: center; font-size: 14px; color: #c
   }
   // 解開之後把金鑰留在這個分頁（sessionStorage）：遊戲裡加密的背景音樂（music\*.bin）用同一把金鑰解開
   // gate.ver：這次載入的版本，遊戲開著時用來比對網站有沒有更新（game.js 的 siteUpdCheck）
-  function show(html, km) { try { if (km) sessionStorage.setItem('gate.km', btoa(String.fromCharCode(...km))); sessionStorage.setItem('gate.ver', VER); } catch (e) {} document.open(); document.write(html); document.close(); }
+  function show(html, km) { try { if (km) sessionStorage.setItem('gate.km', btoa(String.fromCharCode(...km))); sessionStorage.setItem('gate.ver', VER); } catch (e) {} document.open(); document.write(html); document.close(); pwaTags(); }
   function ask(msg) { $('load').hidden = true; $('f').hidden = false; $('msg').textContent = msg || ''; $('pw').focus(); }
   function fail(e) { return e && e.message === 'net' ? '下載失敗，請檢查網路後重新整理。' : '解鎖失敗，請重新整理後再試。'; }
 
