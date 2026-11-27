@@ -35,7 +35,7 @@ body { background: #0a0c12; color: #e8ecf4; font-family: "Microsoft JhengHei", "
 <div id="load"><img src="icon-192.png" alt=""><b>晶幣英雄傳</b><span id="msg">載入中…</span></div>
 <script>
 (() => {
-  const VER = '3697c7bb2a76', $ = id => document.getElementById(id);
+  const VER = 'cdb020ba105c', $ = id => document.getElementById(id);
   try { localStorage.removeItem('gate.key'); } catch (e) {} // 以前密碼頁記住的金鑰，不需要了
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {}); // 主畫面 App 的離線快取
   // 解開後整頁換成遊戲，head 裡的 App 設定會不見：再補回去，遊戲畫面裡也能「加到主畫面」
